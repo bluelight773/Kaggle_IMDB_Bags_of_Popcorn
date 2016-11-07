@@ -80,13 +80,12 @@ from keras.models import load_model
 
 stop_words = set(stopwords.words('english'))
 
-# Based on https://www.kaggle.com/c/word2vec-nlp-tutorial/details/part-2-word-vectors
-
-HOME_DIR = "/home/bluelight/Kaggle/Kaggle_IMDB_Bags_of_Popcorn"
+# Folder where models and tokenizers are stored
+HOME_DIR = "/home/bluelight/Kaggle/imdbpc"
 os.chdir(HOME_DIR)
 
 # Set of supported models to build.  Simply set MODEL_TYPE to the desired model.
-MODEL_TYPE = "Keras NN" ##
+MODEL_TYPE = "Keras NN"
 MODEL_TYPES = {"Google News W2V", "IMDB W2V", "TF RNN", "Passage RNN", "Passage Char RNN", "Keras NN"}
 assert MODEL_TYPE in MODEL_TYPES, "Invalid Model Type"
 
@@ -95,11 +94,11 @@ assert MODEL_TYPE in MODEL_TYPES, "Invalid Model Type"
 # Passage RNN (word-level): 0.965632574938
 # Note this may take hours to complete training.
 
-# Keras NN relying on an Embeddings Layer + GRU Layer ?? + Dense Layer, with following p=0.2 dropouts:
+# Keras NN relying on an Embeddings Layer + CNN+MaxPool Layers + GRU Layer + Dense Layer, with following p=0.2 dropouts:
 # On input to Embedding layer, after Embedding layer, and after GRU layer
-# TensorFlow backend - ?? though it should be noted that Keras did not, as of implementation time,
-#                                     support ensuring consistent results on repeated runs.
-# Theano backend - 0.949987991306
+# Theano backend - 0.953867095363
+# TensorFlow backend - 0.952308125317 though it should be noted that Keras did not, as of implementation time,
+#                                     support ensuring consistent results on repeated runs with TensorFlow backend.
 # See train_and_save_keras_tokenizer_and_nn_model for AUC numbers on other variations
 # Note that training generally took 20 or fewer minutes
 
@@ -363,8 +362,9 @@ def train_and_save_tf_tokenizer_and_rnn_model(x_train, y_train, x_test):
     return (tokenizer, classifier)
 
 
-def train_and_save_keras_tokenizer_and_nn_model(x_train, y_train, x_test, use_cnn=True, dropout_variation=2): ##
-    """Train and save Keras tokenizer and Keras NN model.  With default parameters, best results may be attained.
+def train_and_save_keras_tokenizer_and_nn_model(x_train, y_train, x_test, use_cnn=True, dropout_variation=2):
+    """Train and save Keras tokenizer and Keras NN model.  Default parameters were selected to produce what is likely
+    a reasonably optimal model that is less prone to overfitting.
 
     Keyword arguments:
     x_train:            Should be a series that's already been pre-preocessed: html->text, lowercase, remove punct./#s
@@ -387,10 +387,10 @@ def train_and_save_keras_tokenizer_and_nn_model(x_train, y_train, x_test, use_cn
                         Setting to True:
                         At 3 epochs, dropout_variation=0 produced training acc of .9043 and validation
                         acc of .8550.  With dropout_variation=2, 0.8937/0.8792 (Theano).  Test AUC: 0.952308125317
-                        in TensorFlow.
+                        (TensorFlow), 0.953867095363 (Theano).
                         At 10 epochs, dropout_variation=0  produced training acc of .9843 and validation
-                        acc of .8625. (overfitting).  With dropout_variation=2, ??/?? (Theano).  Test AUC 0.954923156362
-                        in TensorFlow, 0.947220311445 in Theano.
+                        acc of .8625. (overfitting).  With dropout_variation=2, 0.9298/0.8658 (Theano).
+                        Test AUC 0.954923156362 in TensorFlow, 0.947220311445 in Theano.
     dropout_variation:  Indicates how to use dropout layers, if any, in the trained neural net as follows:
                         Unless specified otherwise, training and validation accuracy scores are reported in the form
                         training acc/validation acc, where number of epochs is 3, dropout_variation is 0, 20% of
@@ -404,11 +404,14 @@ def train_and_save_keras_tokenizer_and_nn_model(x_train, y_train, x_test, use_cn
                         1 = One p=0.5 dropout after GRU layer.  .9081/.8505.  Based on suggestions from:
                             http://www.icfhr2014.org/wp-content/uploads/2015/02/ICFHR2014-Bluche.pdf
                         2 = p=0.2 dropout between layers: on input to Embedding layer, after Embedding layer, and after
-                            GRU layer.
-                            No CNN: 0.8596/0.8720 (theano). With 10 epochs: 0.9301/0.8802
+                            GRU layer.  Note that one may want to experiment with adding dropout after the optional
+                            CNN layer and/or its related MaxPool layer.
+                            No CNN: 0.8596/0.8720 (Theano). With 10 epochs: 0.9301/0.8802
                                     Test AUC: 0.948833044597 (TF) / 0.949987991306 (Theano)
-                            With CNN: 3 epochs: 0.8937/0.8792 (theano), Test AUC: 0.952308125317 (TF).
-                                     10 epochs: ??/?? (Theano). Test AUC: 0.954923156362 (TF) / 0.947220311445 (Theano)
+                            **With CNN: 3 epochs: 0.8937/0.8792 (Theano), Test AUC: 0.952308125317 (TF),
+                                                  0.953867095363 (Theano).
+                                        10 epochs: 0.9298/0.8658 (Theano). Test AUC: 0.954923156362 (TF),
+                                                   0.947220311445 (Theano)
                             Based on suggestions from link below.
                         3 = Applies p=0.2 dropout to input to embeddings and p=0.2 dropout_W/U to input gates and
                             recurrent connections respectively in GRU layer.
@@ -527,7 +530,7 @@ def train_and_save_keras_tokenizer_and_nn_model(x_train, y_train, x_test, use_cn
     # Note that while tuning, validation_split parameter was set to 0.2 to use last 20% of training data
     # to report validation score. It seems that if that parameter is set as such, only 80% of x/y_train would be used to
     # train.
-    model.fit(x_train, y_train, nb_epoch=10, batch_size=64, validation_split=0.2) ##
+    model.fit(x_train, y_train, nb_epoch=3, batch_size=64)  # , validation_split=0.2)
 
     # Save model
     model.save(KERAS_NN_MODEL)
@@ -598,6 +601,7 @@ def train_and_save_w2v_model():
 
 # -1 accounts for first row being run twice when map is used (by design)
 reviews_done = -1
+
 
 def get_w2v_features(review, get_text_from_html=True, letters_only=True, lowercase=True, remove_stopwords=True,
                      num_features=300):
@@ -816,5 +820,3 @@ if __name__ == "__main__":
 
     # Note that given we're computing the threshold-based ROC score, we should have y_predict be probabilities
     print("AUC: {}".format(roc_auc_score(y_test, y_predict, average='macro')))
-
-
